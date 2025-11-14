@@ -17,10 +17,8 @@ const URL_PATTERNS = {
 };
 
 const TIMING = {
-  UNFAVORITE_DELAY: 300 // ms between unfavorite clicks
+  NAVIGATION_DELAY: 500
 };
-
-
 
 /**
  * Message listener for actions from popup
@@ -28,16 +26,18 @@ const TIMING = {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const { action } = request;
   
-  try {
-    if (action.startsWith('save')) {
-      handleSave(action);
-    } else if (action.startsWith('unsave')) {
-      handleUnsave(action);
+  (async () => {
+    try {
+      if (action.startsWith('save')) {
+        await handleSave(action);
+      } else if (action.startsWith('unsave')) {
+        handleUnsave(action);
+      }
+    } catch (error) {
+      console.error('Error handling action:', error);
+      alert(`Error: ${error.message}`);
     }
-  } catch (error) {
-    console.error('Error handling action:', error);
-    alert(`Error: ${error.message}`);
-  }
+  })();
 });
 
 /**
@@ -96,6 +96,20 @@ function determineFilename(url, fallbackBase = null, isVideo = false) {
 }
 
 /**
+ * Extracts post ID from image URL in masonry view
+ * @param {string} imgSrc
+ * @returns {string|null}
+ */
+function extractPostId(imgSrc) {
+  try {
+    const match = imgSrc.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+    return match ? match[1] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * Extracts the base filename without extension from a URL
  * @param {string} url - The image URL
  * @returns {string} Base filename without extension
@@ -116,10 +130,42 @@ function isValidUrl(url, patterns) {
 }
 
 /**
+ * Checks if a video URL exists by creating a video element and testing load
+ * @param {string} url - The video URL to check
+ * @returns {Promise<boolean>}
+ */
+function checkVideoExists(url) {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    
+    const timeout = setTimeout(() => {
+      video.src = '';
+      resolve(false);
+    }, 3000); // 3 second timeout
+    
+    video.onloadedmetadata = () => {
+      clearTimeout(timeout);
+      video.src = '';
+      resolve(true);
+    };
+    
+    video.onerror = () => {
+      clearTimeout(timeout);
+      video.src = '';
+      resolve(false);
+    };
+    
+    video.src = url;
+  });
+}
+
+/**
  * Handles media download requests
  * @param {string} type - Type of download (saveImages, saveVideos, saveBoth)
  */
-function handleSave(type) {
+async function handleSave(type) {
+  console.log(`Starting handleSave with type: ${type}`);
   const media = [];
   const seen = new Set();
   
@@ -129,7 +175,12 @@ function handleSave(type) {
     throw new Error('No media cards found. Make sure you are on the favorites page.');
   }
   
-  cards.forEach((card) => {
+  // Show progress message
+  const totalCards = cards.length;
+  let processedCards = 0;
+  console.log(`Found ${totalCards} cards to process`);
+  
+  for (const card of cards) {
     let imageName = null;
     
     // Extract image
@@ -148,11 +199,12 @@ function handleSave(type) {
       }
     }
     
-  // Extract video
+    // Extract video
     if (type === 'saveVideos' || type === 'saveBoth') {
       const video = card.querySelector(SELECTORS.VIDEO);
       if (video && video.src) {
         const url = video.src.split('?')[0];
+        console.log(`Found video: ${url}`);
         if (!seen.has(url)) {
           seen.add(url);
           
@@ -160,11 +212,42 @@ function handleSave(type) {
           const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
           const filename = (imageName && uuidRe.test(imageName)) ? `${imageName}.mp4` : determineFilename(url, imageName || null, true);
 
+          // Add SD video with full URL (including query params for cache busting)
           media.push({ url: video.src, filename });
+          console.log(`Added SD video: ${filename}`);
+          
+          // Try to add HD version - check if it exists first
+          if (url.includes('generated_video.mp4')) {
+            // Construct HD URL from SD URL
+            const hdUrl = video.src.replace('generated_video.mp4', 'generated_video_hd.mp4');
+            const hdFilename = filename.replace(/(\.[^.]+)$/, '-HD$1');
+            
+            if (!seen.has(hdUrl)) {
+              console.log(`Checking if HD video exists: ${hdUrl}`);
+              const hdExists = await checkVideoExists(hdUrl);
+              
+              if (hdExists) {
+                seen.add(hdUrl);
+                media.push({ url: hdUrl, filename: hdFilename });
+                console.log(`✓ HD video exists, added: ${hdFilename}`);
+              } else {
+                console.log(`✗ HD video does not exist, skipping: ${hdFilename}`);
+              }
+            }
+          } else {
+            console.log(`Video URL doesn't match generated_video.mp4 pattern: ${url}`);
+          }
         }
       }
     }
-  });
+    
+    processedCards++;
+    if (processedCards % 10 === 0) {
+      console.log(`Processed ${processedCards}/${totalCards} cards...`);
+    }
+  }
+  
+  console.log(`Total media items collected: ${media.length}`);
   
   if (media.length === 0) {
     throw new Error('No media found matching the selected criteria.');
