@@ -1,4 +1,4 @@
-# Grok Imagine Favorites Manager - Chrome Extension
+# Grok Imagine Favorites Manager
 
 A modern Chrome extension to download and manage your favorited Grok Imagine images and videos.
 
@@ -31,7 +31,7 @@ A modern Chrome extension to download and manage your favorited Grok Imagine ima
 - **Download Videos Only** - Downloads only videos (named to match images)
 
 **Manage:**
-- **Unfavorite Items (Items with Images & Videos)** - Removes favorites that have both image and video formats
+- **Unfavorite (Items with Images & Videos)** - Removes favorites that have both image and video formats
 
 ## Files
 
