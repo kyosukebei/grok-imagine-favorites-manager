@@ -2,7 +2,9 @@
 
 A modern Chrome extension to download and manage your favorited Grok Imagine images and videos.
 
-<img width="335" height="559" alt="grok-imagine-favorites-manager" src="https://github.com/user-attachments/assets/df849e4b-e1b2-4bb3-bba4-97d53fe1087d" />
+<img width="339" height="597" alt="Screenshot 2025-11-17 at 10 47 06 AM" src="https://github.com/user-attachments/assets/1e41fc40-7bda-4be1-b959-ca9b66d44c2d" />
+
+<img width="408" height="257" alt="Screenshot 2025-11-17 at 10 23 38 AM" src="https://github.com/user-attachments/assets/51ac09e1-8973-4cf3-a5e7-034677b62cdf" />
 
 ## Features
 
