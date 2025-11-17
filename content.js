@@ -403,20 +403,29 @@ function checkVideoExists(url) {
     const video = document.createElement('video');
     video.preload = 'metadata';
     
-    const timeout = setTimeout(() => {
+    const cleanup = () => {
+      // Remove event listeners to prevent memory leaks
+      video.onloadedmetadata = null;
+      video.onerror = null;
       video.src = '';
+      video.load(); // Force release of resources
+      // Don't keep reference to video element
+    };
+    
+    const timeout = setTimeout(() => {
+      cleanup();
       resolve(false);
     }, 3000); // 3 second timeout
     
     video.onloadedmetadata = () => {
       clearTimeout(timeout);
-      video.src = '';
+      cleanup();
       resolve(true);
     };
     
     video.onerror = () => {
       clearTimeout(timeout);
-      video.src = '';
+      cleanup();
       resolve(false);
     };
     
@@ -676,11 +685,8 @@ async function scrollAndCollectVideosForUpscale() {
         if (!seen.has(url) && url.includes('generated_video.mp4')) {
           seen.add(url);
           
-          // Check if HD version already exists
-          const hdUrl = video.src.replace('generated_video.mp4', 'generated_video_hd.mp4');
-          const hdExists = await checkVideoExists(hdUrl);
-          
-          if (!hdExists) {
+          // Only check if it's not already an HD video
+          if (!url.includes('generated_video_hd.mp4')) {
             const videoId = extractVideoId(video.src);
             if (videoId) {
               videoIds.push(videoId);
@@ -691,10 +697,10 @@ async function scrollAndCollectVideosForUpscale() {
     }
     
     const currentCardCount = cards.length;
-    console.log(`Current cards: ${currentCardCount}, Videos to upscale: ${videoIds.length}, Last: ${lastCardCount}`);
+    console.log(`Current cards: ${currentCardCount}, Videos to check: ${videoIds.length}, Last: ${lastCardCount}`);
     
     const scrollProgress = Math.min(10, (unchangedCount / maxUnchangedAttempts) * 10);
-    ProgressModal.update(scrollProgress, `Collecting videos... Found ${videoIds.length} to upscale`);
+    ProgressModal.update(scrollProgress, `Collecting videos... Found ${videoIds.length} to check`);
     
     if (currentCardCount === lastCardCount) {
       unchangedCount++;
@@ -702,7 +708,7 @@ async function scrollAndCollectVideosForUpscale() {
     } else {
       unchangedCount = 0;
       lastCardCount = currentCardCount;
-      console.log(`New cards found! Videos to upscale: ${videoIds.length}`);
+      console.log(`New cards found! Videos to check: ${videoIds.length}`);
     }
     
     // Scroll down by viewport height
@@ -720,7 +726,7 @@ async function scrollAndCollectVideosForUpscale() {
   scrollContainer.scrollTop = 0;
   await new Promise(resolve => setTimeout(resolve, 500));
   
-  console.log(`Finished! Total videos to upscale: ${videoIds.length}`);
+  console.log(`Finished! Total videos to check: ${videoIds.length}`);
   return videoIds;
 }
 
@@ -907,10 +913,11 @@ async function handleUpscale() {
     return;
   }
   
-  ProgressModal.update(10, `Found ${videosToUpscale.length} videos to upscale`);
+  ProgressModal.update(10, `Found ${videosToUpscale.length} videos to check`);
   
   let successCount = 0;
   let skipCount = 0;
+  let alreadyHDCount = 0;
   
   for (let i = 0; i < videosToUpscale.length; i++) {
     // Check for cancellation
@@ -923,6 +930,18 @@ async function handleUpscale() {
     
     const videoId = videosToUpscale[i];
     const progress = 10 + ((i / videosToUpscale.length) * 90);
+    ProgressModal.update(progress, `Checking video ${i + 1}/${videosToUpscale.length}...`);
+    
+    // First check if HD already exists (might have been created since collection)
+    const hdUrl = `https://assets.grok.com/users/3c21ee90-4215-4500-ac66-4b3016974861/generated/${videoId}/generated_video_hd.mp4`;
+    const hdExists = await checkVideoExists(hdUrl);
+    
+    if (hdExists) {
+      alreadyHDCount++;
+      console.log(`Video ${i + 1} already has HD version`);
+      continue;
+    }
+    
     ProgressModal.update(progress, `Upscaling video ${i + 1}/${videosToUpscale.length}... (may take ~30s)`);
     
     const upscaled = await upscaleVideo(videoId);
@@ -938,7 +957,7 @@ async function handleUpscale() {
   }
   
   ProgressModal.hide();
-  alert(`Finished! Successfully upscaled ${successCount} videos${skipCount > 0 ? `, ${skipCount} skipped or already HD` : ''}. Refresh to see changes.`);
+  alert(`Finished! Successfully upscaled ${successCount} videos${alreadyHDCount > 0 ? `, ${alreadyHDCount} already HD` : ''}${skipCount > 0 ? `, ${skipCount} skipped` : ''}. Refresh to see changes.`);
 }
 
 /**
