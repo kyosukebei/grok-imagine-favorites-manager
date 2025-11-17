@@ -2,7 +2,7 @@
 
 A modern Chrome extension to download and manage your favorited Grok Imagine images and videos.
 
-<img width="339" height="597" alt="Screenshot 2025-11-17 at 10 47 06 AM" src="https://github.com/user-attachments/assets/1e41fc40-7bda-4be1-b959-ca9b66d44c2d" />
+<img width="337" height="601" alt="Screenshot 2025-11-17 at 2 51 28 PM" src="https://github.com/user-attachments/assets/10f1b4d2-76ef-4eff-862a-84db65494dae" />
 
 <img width="408" height="257" alt="Screenshot 2025-11-17 at 10 23 38 AM" src="https://github.com/user-attachments/assets/51ac09e1-8973-4cf3-a5e7-034677b62cdf" />
 
