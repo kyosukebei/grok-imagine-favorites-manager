@@ -942,34 +942,62 @@ async function handleUpscale() {
   
   let successCount = 0;
   let skipCount = 0;
+  const STAGGER_DELAY = 300; // 300ms delay between requests
   
+  // Start all upscale requests with staggered delays
+  const upscalePromises = [];
   for (let i = 0; i < videosToUpscale.length; i++) {
-    // Check for cancellation
+    // Check for cancellation before starting each request
     if (ProgressModal.isCancelled()) {
       console.log(`Upscale operation cancelled at video ${i + 1}`);
       ProgressModal.hide();
-      alert(`Operation cancelled. ${successCount} of ${videosToUpscale.length} videos were upscaled.`);
+      alert(`Operation cancelled. ${successCount} of ${videosToUpscale.length} videos were requested for upscale.`);
       return;
     }
     
     const videoId = videosToUpscale[i];
-    const progress = 10 + ((i / videosToUpscale.length) * 90);
-    ProgressModal.update(progress, `Upscaling video ${i + 1}/${videosToUpscale.length}... (may take ~30s)`);
+    const videoIndex = i + 1;
     
-    const upscaled = await upscaleVideo(videoId);
-    if (upscaled) {
-      successCount++;
-      console.log(`Successfully requested upscale for video ${i + 1}`);
-      // Wait for upscale to complete
-      await new Promise(resolve => setTimeout(resolve, TIMING.UPSCALE_TIMEOUT));
-    } else {
-      skipCount++;
-      console.log(`Failed to upscale video ${i + 1}`);
-    }
+    // Create a promise that delays, then makes the request
+    const upscalePromise = (async () => {
+      // Stagger the request
+      await new Promise(resolve => setTimeout(resolve, i * STAGGER_DELAY));
+      
+      // Check for cancellation before making the request
+      if (ProgressModal.isCancelled()) {
+        return { success: false, cancelled: true };
+      }
+      
+      const progress = 10 + ((videoIndex / videosToUpscale.length) * 90);
+      ProgressModal.update(progress, `Requesting upscale ${videoIndex}/${videosToUpscale.length}...`);
+      
+      const upscaled = await upscaleVideo(videoId);
+      if (upscaled) {
+        successCount++;
+        console.log(`Successfully requested upscale for video ${videoIndex}`);
+        return { success: true, cancelled: false };
+      } else {
+        skipCount++;
+        console.log(`Failed to upscale video ${videoIndex}`);
+        return { success: false, cancelled: false };
+      }
+    })();
+    
+    upscalePromises.push(upscalePromise);
+  }
+  
+  // Wait for all requests to complete
+  await Promise.all(upscalePromises);
+  
+  // Final check for cancellation
+  if (ProgressModal.isCancelled()) {
+    ProgressModal.hide();
+    alert(`Operation cancelled. ${successCount} of ${videosToUpscale.length} videos were requested for upscale.`);
+    return;
   }
   
   ProgressModal.hide();
-  alert(`Finished! Successfully upscaled ${successCount} videos${skipCount > 0 ? `, ${skipCount} failed` : ''}. Refresh to see changes.`);
+  alert(`Finished! Successfully requested upscale for ${successCount} videos${skipCount > 0 ? `, ${skipCount} failed` : ''}. Upscaling will complete in the background. Refresh in a few minutes to see changes.`);
 }
 
 /**
