@@ -2,7 +2,7 @@
 
 A modern Chrome extension to download and manage your favorited Grok Imagine images and videos.
 
-<img width="339" height="597" alt="Screenshot 2025-11-17 at 10 47 06 AM" src="https://github.com/user-attachments/assets/1e41fc40-7bda-4be1-b959-ca9b66d44c2d" />
+<img width="338" height="596" alt="Screenshot 2025-11-18 at 3 58 38 PM" src="https://github.com/user-attachments/assets/e027c171-1250-4c05-8c32-c8128dabdd4e" />
 
 <img width="408" height="257" alt="Screenshot 2025-11-17 at 10 23 38 AM" src="https://github.com/user-attachments/assets/51ac09e1-8973-4cf3-a5e7-034677b62cdf" />
 
@@ -51,7 +51,9 @@ The extension will automatically scroll and load all favorites before processing
 
 *Note: Upscaling only applies to the most recently generated video. Previous video versions cannot be upscaled through this tool.*
 
-<img width="405" height="253" alt="Screenshot 2025-11-17 at 11 38 04 AM" src="https://github.com/user-attachments/assets/f32d2142-9bb5-46ee-ae6c-801c98d4996f" />
+<img width="402" height="299" alt="Screenshot 2025-11-18 at 4 12 40 PM" src="https://github.com/user-attachments/assets/d86954d1-8cc9-4f37-a7d1-63e171937144" />
+
+<img width="406" height="302" alt="Screenshot 2025-11-18 at 4 12 48 PM" src="https://github.com/user-attachments/assets/73f260ed-7795-40f0-a1e9-c1db95dcdf1d" />
 
 **Manage:**
 - **Unfavorite (Images & Videos)** - Removes favorites that have both image and video formats
