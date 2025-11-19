@@ -515,10 +515,25 @@ async function scrollAndCollectPostIds(filterFn) {
         if (img && img.src) {
           // Try to extract UUID from different URL patterns:
           // Pattern 1: https://imagine-public.x.ai/imagine-public/images/{uuid}.png
-          // Pattern 2: https://assets.grok.com/users/.../{uuid}/content
-          const match = img.src.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+          // Pattern 2: https://assets.grok.com/users/{user-uuid}/generated/{post-uuid}/preview_image.jpg
+          // Pattern 3: https://assets.grok.com/users/{user-uuid}/{post-uuid}/content
+          
+          // First, try the generated path pattern (has the UUID after /generated/)
+          let match = img.src.match(/\/generated\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\//i);
           if (match && match[1]) {
             postId = match[1];
+          } else {
+            // Try the /content pattern (UUID right before /content)
+            match = img.src.match(/\/users\/[a-f0-9-]+\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/content/i);
+            if (match && match[1]) {
+              postId = match[1];
+            } else {
+              // Fall back to imagine-public pattern
+              match = img.src.match(/\/images\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+              if (match && match[1]) {
+                postId = match[1];
+              }
+            }
           }
         }
         
