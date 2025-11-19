@@ -293,7 +293,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } else if (action.startsWith('save')) {
         await handleSave(action);
       } else if (action.startsWith('unsave')) {
-        handleUnsave(action);
+        await handleUnsave(action);
       }
     } catch (error) {
       console.error('Error handling action:', error);
@@ -301,7 +301,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       
       // Only show alert if not cancelled
       if (!error.message.includes('cancelled')) {
-        alert(`Error: ${error.message}`);
+        const shouldRefresh = confirm(`Error: ${error.message}\n\nClick OK to refresh the page.`);
+        if (shouldRefresh) {
+          window.location.reload();
+        }
       }
     } finally {
       // Mark operation as inactive
@@ -484,57 +487,71 @@ async function scrollAndCollectPostIds(filterFn) {
     console.log('Found custom scroll container:', scrollContainer);
   }
   
-  const seenPostIds = new Set();
-  let lastUniqueCount = 0;
-  let unchangedCount = 0;
-  const maxUnchangedAttempts = 5;
+  // First, collect ALL item data while scrolling (don't filter yet)
+  const allItemsData = new Map(); // Map of postId -> { hasVideo, hasImage }
+  let unchangedScrollCount = 0;
+  const maxUnchangedScrollAttempts = 3; // If scroll height doesn't change 3 times, we're at the bottom
   
   // Scroll to top first to ensure we capture everything
   console.log('Scrolling to top before collection...');
   scrollContainer.scrollTop = 0;
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // Initialize previousScrollHeight AFTER scrolling to top and waiting
+  let previousScrollHeight = scrollContainer.scrollHeight;
+  console.log(`Initial scroll height: ${previousScrollHeight}`);
   
   // Get viewport height for relative scrolling
   const viewportHeight = window.innerHeight;
-  console.log(`Viewport height: ${viewportHeight}px`);
+  const scrollIncrement = Math.floor(viewportHeight / 2); // Scroll by HALF viewport to avoid skipping items
+  console.log(`Viewport height: ${viewportHeight}px, Scroll increment: ${scrollIncrement}px`);
   
-  while (unchangedCount < maxUnchangedAttempts) {
+  while (unchangedScrollCount < maxUnchangedScrollAttempts) {
     // Check for cancellation
     if (ProgressModal.isCancelled()) {
       console.log('Collection cancelled by user');
       throw new Error('Operation cancelled by user');
     }
     
-    // Collect post IDs from currently visible items
-    const items = document.querySelectorAll(SELECTORS.LIST_ITEM);
-    items.forEach((item) => {
-      const hasVideo = item.querySelector(SELECTORS.VIDEO);
-      const hasImage = item.querySelector(SELECTORS.IMAGE);
+    // Collect ALL items and their metadata (video/image presence)
+    const cards = document.querySelectorAll(SELECTORS.CARD);
+    let videosInBatch = 0;
+    let imagesInBatch = 0;
+    
+    cards.forEach((card) => {
+      // A video exists if there's a <video> element with the specific selector
+      const hasVideo = !!card.querySelector(SELECTORS.VIDEO);
+      const hasImage = !!card.querySelector(SELECTORS.IMAGE);
       
-      // Apply filter function
-      if (filterFn(hasVideo, hasImage)) {
-        let postId = null;
-        
-        // The post ID is always from the image URL, not the video URL
-        // The video ID is just for the generated video asset
-        const img = item.querySelector(SELECTORS.IMAGE);
+      if (hasVideo) videosInBatch++;
+      if (hasImage) imagesInBatch++;
+      
+      // Extract post ID from video or image
+      let postId = null;
+      
+      // Try video URL first if video exists
+      if (hasVideo) {
+        const video = card.querySelector(SELECTORS.VIDEO);
+        if (video && video.src) {
+          const match = video.src.match(/\/generated\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\//i);
+          if (match && match[1]) {
+            postId = match[1];
+          }
+        }
+      }
+      
+      // If no postId yet, try image URL
+      if (!postId && hasImage) {
+        const img = card.querySelector(SELECTORS.IMAGE);
         if (img && img.src) {
-          // Try to extract UUID from different URL patterns:
-          // Pattern 1: https://imagine-public.x.ai/imagine-public/images/{uuid}.png
-          // Pattern 2: https://assets.grok.com/users/{user-uuid}/generated/{post-uuid}/preview_image.jpg
-          // Pattern 3: https://assets.grok.com/users/{user-uuid}/{post-uuid}/content
-          
-          // First, try the generated path pattern (has the UUID after /generated/)
           let match = img.src.match(/\/generated\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\//i);
           if (match && match[1]) {
             postId = match[1];
           } else {
-            // Try the /content pattern (UUID right before /content)
             match = img.src.match(/\/users\/[a-f0-9-]+\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/content/i);
             if (match && match[1]) {
               postId = match[1];
             } else {
-              // Fall back to imagine-public pattern
               match = img.src.match(/\/images\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
               if (match && match[1]) {
                 postId = match[1];
@@ -542,38 +559,51 @@ async function scrollAndCollectPostIds(filterFn) {
             }
           }
         }
-        
-        if (postId) {
-          seenPostIds.add(postId);
-        }
+      }
+      
+      // Store the item data (will overwrite if seen multiple times due to virtual scroll)
+      if (postId) {
+        allItemsData.set(postId, { hasVideo, hasImage });
       }
     });
     
-    const currentCardCount = items.length;
-    const currentUniqueCount = seenPostIds.size;
-    console.log(`Current cards: ${currentCardCount}, Collected IDs: ${currentUniqueCount}, Last unique: ${lastUniqueCount}`);
+    const currentScrollHeight = scrollContainer.scrollHeight;
+    console.log(`Current cards: ${cards.length}, Videos in view: ${videosInBatch}, Images in view: ${imagesInBatch}, Total collected: ${allItemsData.size}, ScrollHeight: ${currentScrollHeight}`);
     
-    const scrollProgress = Math.min(80, (unchangedCount / maxUnchangedAttempts) * 80);
-    ProgressModal.update(scrollProgress, `Collecting items... Found ${currentUniqueCount} so far`);
-    
-    if (currentUniqueCount === lastUniqueCount) {
-      unchangedCount++;
-      console.log(`No new unique items found (${unchangedCount}/${maxUnchangedAttempts})`);
+    // Check if scroll height has changed (means more content loaded)
+    if (currentScrollHeight === previousScrollHeight) {
+      unchangedScrollCount++;
+      console.log(`Scroll height unchanged (${unchangedScrollCount}/${maxUnchangedScrollAttempts})`);
     } else {
-      unchangedCount = 0;
-      lastUniqueCount = currentUniqueCount;
-      console.log(`New items found! Total collected: ${currentUniqueCount}`);
+      unchangedScrollCount = 0;
+      previousScrollHeight = currentScrollHeight;
+      console.log(`Scroll height increased, continuing...`);
     }
     
-    // Scroll down by viewport height
+    const scrollProgress = Math.min(80, (scrollContainer.scrollTop / currentScrollHeight) * 80);
+    ProgressModal.update(scrollProgress, `Collecting items... Found ${allItemsData.size} so far`);
+    
+    // Scroll down by HALF viewport height to avoid skipping items in virtual scroll
     const currentScroll = scrollContainer.scrollTop;
-    const newScroll = currentScroll + viewportHeight;
+    const newScroll = currentScroll + scrollIncrement;
     scrollContainer.scrollTop = newScroll;
     console.log(`Scrolled from ${currentScroll} to ${scrollContainer.scrollTop}`);
     
     // Wait for content to load
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
+  
+  // Now filter the collected items based on the filter function
+  console.log('Filtering collected items...');
+  const filteredPostIds = [];
+  for (const [postId, { hasVideo, hasImage }] of allItemsData) {
+    if (filterFn(hasVideo, hasImage)) {
+      filteredPostIds.push(postId);
+    }
+  }
+  
+  console.log(`Total items collected: ${allItemsData.size}, After filtering: ${filteredPostIds.length}`);
+  ProgressModal.update(85, `Filtered to ${filteredPostIds.length} items...`);
   
   // Scroll back to top
   console.log('Scrolling back to top');
@@ -581,9 +611,8 @@ async function scrollAndCollectPostIds(filterFn) {
   scrollContainer.scrollTop = 0;
   await new Promise(resolve => setTimeout(resolve, 500));
   
-  const postIds = Array.from(seenPostIds);
-  console.log(`Finished! Total post IDs collected: ${postIds.length}`);
-  return postIds;
+  console.log(`Finished! Total post IDs collected: ${filteredPostIds.length}`);
+  return filteredPostIds;
 }
 
 /**
@@ -627,7 +656,8 @@ async function scrollToLoadAll() {
   
   // Get viewport height for relative scrolling
   const viewportHeight = window.innerHeight;
-  console.log(`Viewport height: ${viewportHeight}px`);
+  const scrollIncrement = Math.floor(viewportHeight / 2); // Scroll by HALF viewport to avoid skipping items
+  console.log(`Viewport height: ${viewportHeight}px, Scroll increment: ${scrollIncrement}px`);
   
   while (unchangedCount < maxUnchangedAttempts) {
     // Track unique cards (use image src as identifier to handle virtual scrolling)
@@ -661,9 +691,9 @@ async function scrollToLoadAll() {
       console.log(`New unique items found! Total: ${totalUnique}`);
     }
     
-    // Scroll down by viewport height
+    // Scroll down by HALF viewport height to avoid skipping items in virtual scroll
     const currentScroll = scrollContainer.scrollTop;
-    const newScroll = currentScroll + viewportHeight;
+    const newScroll = currentScroll + scrollIncrement;
     scrollContainer.scrollTop = newScroll;
     console.log(`Scrolled from ${currentScroll} to ${scrollContainer.scrollTop}`);
     
@@ -712,19 +742,23 @@ async function scrollAndCollectVideosForUpscale() {
   // First pass: collect all video URLs and IDs while scrolling
   const videoData = new Map(); // Map of videoId -> video URL
   const seenUrls = new Set();
-  let lastUniqueCount = 0;
-  let unchangedCount = 0;
-  const maxUnchangedAttempts = 7; // Increased from 5 for better coverage
+  let unchangedScrollCount = 0;
+  const maxUnchangedScrollAttempts = 3; // If scroll height doesn't change 3 times, we're at the bottom
   
   // Scroll to top first to ensure we capture everything
   console.log('Scrolling to top before collection...');
   scrollContainer.scrollTop = 0;
-  await new Promise(resolve => setTimeout(resolve, 1000)); // Increased wait time
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // Initialize previousScrollHeight AFTER scrolling to top and waiting
+  let previousScrollHeight = scrollContainer.scrollHeight;
+  console.log(`Initial scroll height: ${previousScrollHeight}`);
   
   const viewportHeight = window.innerHeight;
-  console.log(`Viewport height: ${viewportHeight}px`);
+  const scrollIncrement = Math.floor(viewportHeight / 2); // Scroll by HALF viewport to avoid skipping items
+  console.log(`Viewport height: ${viewportHeight}px, Scroll increment: ${scrollIncrement}px`);
   
-  while (unchangedCount < maxUnchangedAttempts) {
+  while (unchangedScrollCount < maxUnchangedScrollAttempts) {
     // Check for cancellation
     if (ProgressModal.isCancelled()) {
       console.log('Collection cancelled by user');
@@ -750,23 +784,25 @@ async function scrollAndCollectVideosForUpscale() {
     
     const currentCardCount = cards.length;
     const currentUniqueCount = videoData.size;
-    console.log(`Current cards: ${currentCardCount}, Videos found: ${currentUniqueCount}, Last unique: ${lastUniqueCount}`);
+    const currentScrollHeight = scrollContainer.scrollHeight;
+    console.log(`Current cards: ${currentCardCount}, Videos found: ${currentUniqueCount}, ScrollHeight: ${currentScrollHeight}`);
     
-    const scrollProgress = Math.min(50, (unchangedCount / maxUnchangedAttempts) * 50);
-    ProgressModal.update(scrollProgress, `Collecting videos... Found ${currentUniqueCount} so far`);
-    
-    if (currentUniqueCount === lastUniqueCount) {
-      unchangedCount++;
-      console.log(`No new unique videos found (${unchangedCount}/${maxUnchangedAttempts})`);
+    // Check if scroll height has changed (means more content loaded)
+    if (currentScrollHeight === previousScrollHeight) {
+      unchangedScrollCount++;
+      console.log(`Scroll height unchanged (${unchangedScrollCount}/${maxUnchangedScrollAttempts})`);
     } else {
-      unchangedCount = 0;
-      lastUniqueCount = currentUniqueCount;
-      console.log(`New videos found! Total collected: ${currentUniqueCount}`);
+      unchangedScrollCount = 0;
+      previousScrollHeight = currentScrollHeight;
+      console.log(`Scroll height increased, continuing...`);
     }
     
-    // Scroll down by viewport height
+    const scrollProgress = Math.min(50, (scrollContainer.scrollTop / currentScrollHeight) * 50);
+    ProgressModal.update(scrollProgress, `Collecting videos... Found ${currentUniqueCount} so far`);
+    
+    // Scroll down by HALF viewport height to avoid skipping items in virtual scroll
     const currentScroll = scrollContainer.scrollTop;
-    const newScroll = currentScroll + viewportHeight;
+    const newScroll = currentScroll + scrollIncrement;
     scrollContainer.scrollTop = newScroll;
     console.log(`Scrolled from ${currentScroll} to ${scrollContainer.scrollTop}`);
     
@@ -848,74 +884,166 @@ async function scrollAndCollectMedia(type) {
     console.log('Found custom scroll container:', scrollContainer);
   }
   
-  const media = [];
-  const seen = new Set();
-  let lastUniqueCount = 0;
-  let unchangedCount = 0;
-  const maxUnchangedAttempts = 5;
+  // First, collect ALL media data while scrolling (don't process yet)
+  const allMediaData = new Map(); // Map of url -> { url, filename, isVideo, isHD }
+  let unchangedScrollCount = 0;
+  const maxUnchangedScrollAttempts = 3; // If scroll height doesn't change 3 times, we're at the bottom
   
   // Scroll to top first to ensure we capture everything
   console.log('Scrolling to top before collection...');
   scrollContainer.scrollTop = 0;
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // Initialize previousScrollHeight AFTER scrolling to top and waiting
+  let previousScrollHeight = scrollContainer.scrollHeight;
+  console.log(`Initial scroll height: ${previousScrollHeight}`);
   
   // Get viewport height for relative scrolling
   const viewportHeight = window.innerHeight;
-  console.log(`Viewport height: ${viewportHeight}px`);
+  const scrollIncrement = Math.floor(viewportHeight / 2); // Scroll by HALF viewport to avoid skipping items
+  console.log(`Viewport height: ${viewportHeight}px, Scroll increment: ${scrollIncrement}px`);
   
-  while (unchangedCount < maxUnchangedAttempts) {
+  while (unchangedScrollCount < maxUnchangedScrollAttempts) {
     // Check for cancellation
     if (ProgressModal.isCancelled()) {
       console.log('Scroll and collect cancelled by user');
       throw new Error('Operation cancelled by user');
     }
     
-    // Collect media from currently visible cards
-    const currentCardCount = document.querySelectorAll(SELECTORS.CARD).length;
-    await collectMediaFromVisibleCards(type, media, seen, media.length, currentCardCount);
+    // Collect ALL media from currently visible cards
+    const cards = document.querySelectorAll(SELECTORS.CARD);
     
-    const currentUniqueCount = media.length;
-    console.log(`Current cards: ${currentCardCount}, Collected media: ${currentUniqueCount}, Last unique: ${lastUniqueCount}`);
-    
-    // Update progress with collected media count (more accurate than card count)
-    const scrollProgress = Math.min(80, (unchangedCount / maxUnchangedAttempts) * 80);
-    ProgressModal.update(scrollProgress, `Collecting media... Found ${currentUniqueCount} items so far`);
-    
-    if (currentUniqueCount === lastUniqueCount) {
-      unchangedCount++;
-      console.log(`No new unique media found (${unchangedCount}/${maxUnchangedAttempts})`);
-    } else {
-      unchangedCount = 0;
-      lastUniqueCount = currentUniqueCount;
-      console.log(`New media found! Collected: ${currentUniqueCount}`);
+    for (const card of cards) {
+      let imageName = null;
+      
+      // Extract image
+      const img = card.querySelector(SELECTORS.IMAGE);
+      if (img && img.src) {
+        const url = img.src.split('?')[0];
+        
+        if (isValidUrl(url, URL_PATTERNS.IMAGE)) {
+          const filename = determineFilename(url, null, false);
+          imageName = extractBaseName(url);
+          
+          // Store image data
+          if (!allMediaData.has(url)) {
+            allMediaData.set(url, { url: img.src, filename, isVideo: false, isHD: false });
+          }
+        }
+      }
+      
+      // Extract video
+      const video = card.querySelector(SELECTORS.VIDEO);
+      if (video && video.src) {
+        const url = video.src.split('?')[0];
+        
+        if (!allMediaData.has(url)) {
+          const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const filename = (imageName && uuidRe.test(imageName)) ? `${imageName}.mp4` : determineFilename(url, imageName || null, true);
+          
+          // Store video data
+          allMediaData.set(url, { url: video.src, filename, isVideo: true, isHD: false });
+          
+          // Also track potential HD version URL
+          if (url.includes('generated_video.mp4')) {
+            const hdUrl = video.src.replace('generated_video.mp4', 'generated_video_hd.mp4');
+            const hdFilename = filename.replace(/(\.[^.]+)$/, '-HD$1');
+            
+            if (!allMediaData.has(hdUrl)) {
+              allMediaData.set(hdUrl, { url: hdUrl, filename: hdFilename, isVideo: true, isHD: true });
+            }
+          }
+        }
+      }
     }
     
-    // Scroll down by viewport height
+    const currentScrollHeight = scrollContainer.scrollHeight;
+    console.log(`Current cards: ${cards.length}, Total media collected: ${allMediaData.size}, ScrollHeight: ${currentScrollHeight}`);
+    
+    // Check if scroll height has changed (means more content loaded)
+    if (currentScrollHeight === previousScrollHeight) {
+      unchangedScrollCount++;
+      console.log(`Scroll height unchanged (${unchangedScrollCount}/${maxUnchangedScrollAttempts})`);
+    } else {
+      unchangedScrollCount = 0;
+      previousScrollHeight = currentScrollHeight;
+      console.log(`Scroll height increased, continuing...`);
+    }
+    
+    const scrollProgress = Math.min(60, (scrollContainer.scrollTop / currentScrollHeight) * 60);
+    ProgressModal.update(scrollProgress, `Collecting media... Found ${allMediaData.size} items so far`);
+    
+    // Scroll down by HALF viewport height to avoid skipping items in virtual scroll
     const currentScroll = scrollContainer.scrollTop;
-    const newScroll = currentScroll + viewportHeight;
+    const newScroll = currentScroll + scrollIncrement;
     scrollContainer.scrollTop = newScroll;
     console.log(`Scrolled from ${currentScroll} to ${scrollContainer.scrollTop}`);
     
     // Wait for content to load
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
   
-  // Check for cancellation before final collection
-  if (ProgressModal.isCancelled()) {
-    console.log('Scroll and collect cancelled by user');
-    throw new Error('Operation cancelled by user');
+  // Now filter and process the collected media based on type
+  console.log('Processing collected media...');
+  ProgressModal.update(70, 'Processing collected media...');
+  
+  const media = [];
+  const hdVideosToCheck = []; // Collect HD videos to check separately
+  
+  for (const [url, data] of allMediaData) {
+    // Handle HD videos separately - queue them for checking
+    if (data.isHD && data.isVideo) {
+      hdVideosToCheck.push({ url, data });
+      continue;
+    }
+    
+    // Filter based on type
+    const shouldInclude = 
+      (type === 'saveImages' && !data.isVideo) ||
+      (type === 'saveVideos' && data.isVideo) ||
+      (type === 'saveBoth');
+    
+    if (shouldInclude) {
+      media.push({ url: data.url, filename: data.filename });
+    }
   }
   
-  // One final collection pass
-  const finalCardCount = document.querySelectorAll(SELECTORS.CARD).length;
-  await collectMediaFromVisibleCards(type, media, seen, media.length, finalCardCount);
+  // Now check HD videos asynchronously (after main collection)
+  console.log(`Checking ${hdVideosToCheck.length} HD videos...`);
+  let hdCheckedCount = 0;
+  
+  for (const { url, data } of hdVideosToCheck) {
+    // Check for cancellation
+    if (ProgressModal.isCancelled()) {
+      console.log('HD check cancelled by user');
+      throw new Error('Operation cancelled by user');
+    }
+    
+    const hdExists = await checkVideoExists(url);
+    if (hdExists) {
+      const shouldInclude = 
+        (type === 'saveVideos' || type === 'saveBoth');
+      
+      if (shouldInclude) {
+        media.push({ url: data.url, filename: data.filename });
+      }
+    }
+    
+    hdCheckedCount++;
+    const checkProgress = 70 + ((hdCheckedCount / hdVideosToCheck.length) * 15);
+    ProgressModal.update(checkProgress, `Checked ${hdCheckedCount}/${hdVideosToCheck.length} HD videos...`);
+  }
+  
+  console.log(`Total media collected: ${allMediaData.size}, After filtering: ${media.length}`);
+  ProgressModal.update(85, `Filtered to ${media.length} items...`);
   
   // Scroll back to top
   console.log('Scrolling back to top');
+  ProgressModal.update(90, 'Scrolling back to top...');
   scrollContainer.scrollTop = 0;
   await new Promise(resolve => setTimeout(resolve, 500));
   
-  console.log(`Finished! Total media collected: ${media.length}`);
+  console.log(`Finished! Total media to download: ${media.length}`);
   return media;
 }
 
@@ -999,7 +1127,10 @@ async function handleUpscale() {
   
   if (videosToUpscale.length === 0) {
     ProgressModal.hide();
-    alert('No videos found that need upscaling.');
+    const shouldRefresh = confirm('No videos found that need upscaling.\n\nClick OK to refresh the page.');
+    if (shouldRefresh) {
+      window.location.reload();
+    }
     return;
   }
   
@@ -1016,7 +1147,10 @@ async function handleUpscale() {
     if (ProgressModal.isCancelled()) {
       console.log(`Upscale operation cancelled at video ${i + 1}`);
       ProgressModal.hide();
-      alert(`Operation cancelled. ${successCount} of ${videosToUpscale.length} videos were requested for upscale.`);
+      const shouldRefresh = confirm(`Operation cancelled. ${successCount} of ${videosToUpscale.length} videos were requested for upscale.\n\nClick OK to refresh the page.`);
+      if (shouldRefresh) {
+        window.location.reload();
+      }
       return;
     }
     
@@ -1057,12 +1191,19 @@ async function handleUpscale() {
   // Final check for cancellation
   if (ProgressModal.isCancelled()) {
     ProgressModal.hide();
-    alert(`Operation cancelled. ${successCount} of ${videosToUpscale.length} videos were requested for upscale.`);
+    const shouldRefresh = confirm(`Operation cancelled. ${successCount} of ${videosToUpscale.length} videos were requested for upscale.\n\nClick OK to refresh the page.`);
+    if (shouldRefresh) {
+      window.location.reload();
+    }
     return;
   }
   
   ProgressModal.hide();
-  alert(`Finished! Successfully requested upscale for ${successCount} videos${skipCount > 0 ? `, ${skipCount} failed` : ''}. Upscaling will complete in the background. Refresh in a few minutes to see changes.`);
+  const shouldRefresh = confirm(`Finished! Successfully requested upscale for ${successCount} videos${skipCount > 0 ? `, ${skipCount} failed` : ''}.\n\nUpscaling will complete in the background.\n\nClick OK to refresh the page now (required before next operation).`);
+  chrome.storage.local.set({ activeOperation: false });
+  if (shouldRefresh) {
+    window.location.reload();
+  }
 }
 
 /**
@@ -1089,37 +1230,33 @@ async function handleSave(type) {
   
   ProgressModal.update(100, `Found ${media.length} items to download`);
   
+  // Hide modal and show refresh prompt BEFORE sending download message
+  ProgressModal.hide();
+  
+  const shouldRefresh = confirm(`Ready to download ${media.length} items!\n\nDownloads will start after you close this dialog. Check extension popup for progress.\n\nClick OK to refresh the page now, or Cancel to stay (refresh required before next operation).`);
+  
   // Send to background script for download
   chrome.runtime.sendMessage({ 
     action: 'startDownloads', 
     media 
-  }, (response) => {
-    if (chrome.runtime.lastError) {
-      ProgressModal.hide();
-      throw new Error(chrome.runtime.lastError.message);
-    }
-    
-    if (response && response.success) {
-      ProgressModal.update(100, `Started downloading ${media.length} items. Check extension popup for progress.`);
-      setTimeout(() => ProgressModal.hide(), 2000);
-    } else {
-      ProgressModal.hide();
-      throw new Error('Failed to start downloads');
-    }
   });
+  
+  if (shouldRefresh) {
+    window.location.reload();
+  }
 }
 
 /**
  * Handles unfavorite operations
  * @param {string} type - Type of unfavorite operation
  */
-function handleUnsave(type) {
+async function handleUnsave(type) {
   if (type === 'unsaveBoth') {
-    handleUnsaveBoth();
+    await handleUnsaveBoth();
   } else if (type === 'unsaveImages') {
-    handleUnsaveImages();
+    await handleUnsaveImages();
   } else if (type === 'unsaveVideos') {
-    handleUnsaveVideos();
+    await handleUnsaveVideos();
   }
 }
 
@@ -1138,7 +1275,10 @@ async function handleUnsaveBoth() {
   
   if (postIds.length === 0) {
     ProgressModal.hide();
-    alert('No items found.');
+    const shouldRefresh = confirm('No items found.\n\nClick OK to refresh the page.');
+    if (shouldRefresh) {
+      window.location.reload();
+    }
     return;
   }
   
@@ -1153,7 +1293,10 @@ async function handleUnsaveBoth() {
     if (ProgressModal.isCancelled()) {
       console.log(`Unfavorite operation cancelled at item ${i + 1}`);
       ProgressModal.hide();
-      alert(`Operation cancelled. ${successCount} of ${postIds.length} items were unfavorited.`);
+      const shouldRefresh = confirm(`Operation cancelled. ${successCount} of ${postIds.length} items were unfavorited.\n\nClick OK to refresh the page.`);
+      if (shouldRefresh) {
+        window.location.reload();
+      }
       return;
     }
     
@@ -1179,7 +1322,10 @@ async function handleUnsaveBoth() {
   }
   
   ProgressModal.hide();
-  alert(`Finished! Successfully unfavorited ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ''}. Refresh to see changes.`);
+  const shouldRefresh = confirm(`Finished! Successfully unfavorited ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ''}.\n\nClick OK to refresh the page now (required to see changes and before next operation).`);
+  if (shouldRefresh) {
+    window.location.reload();
+  }
 }
 
 /**
@@ -1197,7 +1343,10 @@ async function handleUnsaveImages() {
   
   if (postIds.length === 0) {
     ProgressModal.hide();
-    alert('No single image items found.');
+    const shouldRefresh = confirm('No single image items found.\n\nClick OK to refresh the page.');
+    if (shouldRefresh) {
+      window.location.reload();
+    }
     return;
   }
   
@@ -1212,7 +1361,10 @@ async function handleUnsaveImages() {
     if (ProgressModal.isCancelled()) {
       console.log(`Unfavorite operation cancelled at item ${i + 1}`);
       ProgressModal.hide();
-      alert(`Operation cancelled. ${successCount} of ${postIds.length} items were unfavorited.`);
+      const shouldRefresh = confirm(`Operation cancelled. ${successCount} of ${postIds.length} items were unfavorited.\n\nClick OK to refresh the page.`);
+      if (shouldRefresh) {
+        window.location.reload();
+      }
       return;
     }
     
@@ -1238,7 +1390,10 @@ async function handleUnsaveImages() {
   }
   
   ProgressModal.hide();
-  alert(`Finished! Successfully unfavorited ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ''}. Refresh to see changes.`);
+  const shouldRefresh = confirm(`Finished! Successfully unfavorited ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ''}.\n\nClick OK to refresh the page now (required to see changes and before next operation).`);
+  if (shouldRefresh) {
+    window.location.reload();
+  }
 }
 
 /**
@@ -1256,7 +1411,10 @@ async function handleUnsaveVideos() {
   
   if (postIds.length === 0) {
     ProgressModal.hide();
-    alert('No video items found.');
+    const shouldRefresh = confirm('No video items found.\n\nClick OK to refresh the page.');
+    if (shouldRefresh) {
+      window.location.reload();
+    }
     return;
   }
   
@@ -1271,7 +1429,10 @@ async function handleUnsaveVideos() {
     if (ProgressModal.isCancelled()) {
       console.log(`Unfavorite operation cancelled at item ${i + 1}`);
       ProgressModal.hide();
-      alert(`Operation cancelled. ${successCount} of ${postIds.length} items were unfavorited.`);
+      const shouldRefresh = confirm(`Operation cancelled. ${successCount} of ${postIds.length} items were unfavorited.\n\nClick OK to refresh the page.`);
+      if (shouldRefresh) {
+        window.location.reload();
+      }
       return;
     }
     
@@ -1297,5 +1458,8 @@ async function handleUnsaveVideos() {
   }
   
   ProgressModal.hide();
-  alert(`Finished! Successfully unfavorited ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ''}. Refresh to see changes.`);
+  const shouldRefresh = confirm(`Finished! Successfully unfavorited ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ''}.\n\nClick OK to refresh the page now (required to see changes and before next operation).`);
+  if (shouldRefresh) {
+    window.location.reload();
+  }
 }
