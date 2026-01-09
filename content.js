@@ -1001,32 +1001,45 @@ async function scrollAndCollectMedia(type) {
     for (const card of cards) {
       const postId = extractPostIdFromElement(card);
       
-      // 1. Process Image
+      // 1. Process Image (Only if image element exists)
       if (type === 'saveImages' || type === 'saveBoth') {
         const img = card.querySelector(SELECTORS.IMAGE);
         if (img && img.src) {
-          const postIdForImg = extractPostId(img.src);
-          const hqUrl = postIdForImg ? `https://imagine-public.x.ai/imagine-public/images/${postIdForImg}.jpg?cache=1&dl=1` : null;
-          const imageUrl = hqUrl || img.src.split('?')[0].replace(/\/cdn-cgi\/image\/[^\/]*\//, '/');
+          const postIdFromImg = extractPostId(img.src);
+          // Only use HQ URL if we found a Post ID directly in the image source
+          // This prevents XML downloads for non-generation assets
+          let imageUrl = img.src.split('?')[0].replace(/\/cdn-cgi\/image\/[^\/]*\//, '/');
+          let effectivePostId = postIdFromImg;
 
-          // Filter out previews if we couldn't get a Post ID
-          if (!postId && (imageUrl.includes('preview_image') || imageUrl.includes('thumbnail'))) {
-            console.log('Skipping preview image as no Post ID found:', imageUrl);
-          } else if (!allMediaData.has(imageUrl) && isValidUrl(imageUrl, URL_PATTERNS.IMAGE)) {
-            const filename = generateUniqueFilename(imageUrl, postId || postIdForImg, false);
-            allMediaData.set(imageUrl, { url: imageUrl, filename, isVideo: false, isHD: false });
+          if (postIdFromImg) {
+            imageUrl = `https://imagine-public.x.ai/imagine-public/images/${postIdFromImg}.jpg?cache=1&dl=1`;
+          } else if (postId) {
+            // If card has a Post ID but image doesn't, it might be a thumbnail for a non-image gen.
+            // In this case, we prefer the original image URL unless it's clearly a preview.
+            effectivePostId = postId;
+          }
+
+          if (isValidUrl(imageUrl, URL_PATTERNS.IMAGE)) {
+            // Filter out previews IF we don't have a reliable generation Post ID
+            const isPreview = imageUrl.includes('preview_image') || imageUrl.includes('thumbnail');
+            if (isPreview && !postIdFromImg) {
+              console.log('Skipping speculative preview download:', imageUrl);
+            } else if (!allMediaData.has(imageUrl)) {
+              const filename = generateUniqueFilename(imageUrl, effectivePostId, false);
+              allMediaData.set(imageUrl, { url: imageUrl, filename, isVideo: false });
+            }
           }
         }
       }
 
-      // 2. Process Video
+      // 2. Process Video (Only if video element exists)
       if (type === 'saveVideos' || type === 'saveBoth') {
         const video = card.querySelector(SELECTORS.VIDEO);
         if (video && video.src) {
           const videoUrl = video.src.split('?')[0];
           if (!allMediaData.has(videoUrl) && isValidUrl(videoUrl, URL_PATTERNS.IMAGE)) {
             const filename = generateUniqueFilename(videoUrl, postId, true);
-            allMediaData.set(videoUrl, { url: videoUrl, filename: filename, isVideo: true, isHD: false });
+            allMediaData.set(videoUrl, { url: videoUrl, filename: filename, isVideo: true });
           }
         }
       }
