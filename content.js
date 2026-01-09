@@ -1027,26 +1027,28 @@ async function scrollAndCollectMedia(type) {
       if (type === 'saveImages' || type === 'saveBoth') {
         const img = card.querySelector(SELECTORS.IMAGE) || card.querySelector('img');
         if (img && img.src) {
-          const postIdFromImg = extractPostId(img.src);
           const originalUrl = img.src.split('?')[0].replace(/\/cdn-cgi\/image\/[^\/]*\//, '/');
           
-          // Use the most reliable ID: Card Link ID > Image Src ID > videoId
-          const effectivePostId = postId || postIdFromImg || (hasVideoInCard ? videoId : null);
+          // CRITICAL: Extract ID from the IMAGE source itself, not from the card link.
+          // This is because the asset ID can be different from the post ID.
+          const assetId = extractPostId(originalUrl);
           
           let imageUrl = originalUrl;
-          if (effectivePostId) {
-            // Always target the high-quality URL if we have an ID.
-            // We don't do pre-checks (fetch) here anymore because CORS blocks them in content scripts
-            // and it was causing valid images to be skipped.
-            imageUrl = `https://imagine-public.x.ai/imagine-public/images/${effectivePostId}.jpg?cache=1&dl=1`;
-          }
-
-          if (isValidUrl(imageUrl, URL_PATTERNS.IMAGE)) {
-            if (!allMediaData.has(imageUrl)) {
-              const filename = generateUniqueFilename(imageUrl, effectivePostId, false);
-              allMediaData.set(imageUrl, { url: imageUrl, filename, isVideo: false });
-              console.log(`Collected image: ${imageUrl}`);
+          if (assetId) {
+            // If the image has its own UUID, it's a high-quality candidate.
+            imageUrl = `https://imagine-public.x.ai/imagine-public/images/${assetId}.jpg?cache=1&dl=1`;
+            
+            if (isValidUrl(imageUrl, URL_PATTERNS.IMAGE)) {
+              if (!allMediaData.has(imageUrl)) {
+                // Use card Post ID (if available) as the filename prefix for context, 
+                // but the URL is derived from the assetId.
+                const filename = generateUniqueFilename(imageUrl, postId || assetId, false);
+                allMediaData.set(imageUrl, { url: imageUrl, filename, isVideo: false });
+                console.log(`Collected high-quality image derived from asset ID: ${imageUrl}`);
+              }
             }
+          } else {
+            console.log(`Skipping image as it has no valid asset UUID (likely a low-res preview or UI element): ${originalUrl}`);
           }
         }
       }
