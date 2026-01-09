@@ -243,6 +243,11 @@ const ProgressModal = {
     document.getElementById('grok-cancel-button').disabled = true;
     document.getElementById('grok-cancel-button').style.opacity = '0.5';
     document.getElementById('grok-cancel-button').style.cursor = 'not-allowed';
+
+    // Remove modal after a short delay
+    setTimeout(() => {
+      this.remove();
+    }, 1000);
   },
 
   isCancelled() {
@@ -381,7 +386,6 @@ function determineFilename(url, fallbackBase = null, isVideo = false) {
  */
 function extractPostId(imgSrc) {
   try {
-    // Look for the ID after specific keywords like 'generated' or 'post', or as the last UUID in the path
     // Pattern 1: .../generated/{UUID}/...
     const genMatch = imgSrc.match(/\/generated\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
     if (genMatch) return genMatch[1];
@@ -390,11 +394,10 @@ function extractPostId(imgSrc) {
     const postMatch = imgSrc.match(/\/post\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
     if (postMatch) return postMatch[1];
 
-    // Pattern 3: The last UUID in a path (often the asset ID, not the user ID)
-    const allUuids = imgSrc.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi);
-    if (allUuids && allUuids.length > 0) {
-      return allUuids[allUuids.length - 1];
-    }
+    // Pattern 3: assets.grok.com content path (id follows userId)
+    // format: .../users/{userId}/{postId}/content
+    const contentMatch = imgSrc.match(/\/users\/[0-9a-f-]{36}\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+    if (contentMatch) return contentMatch[1];
     
     return null;
   } catch (e) {
@@ -1252,6 +1255,11 @@ async function handleSave(type) {
     action: 'startDownloads',
     media
   });
+
+  // Automatically close progress modal after starting downloads
+  setTimeout(() => {
+    ProgressModal.remove();
+  }, 2000);
 }
 
 /**
