@@ -476,16 +476,19 @@ function simpleHash(str) {
  * @param {string[]} patterns - Array of URL patterns to match
  * @returns {boolean}
  */
-function isValidUrl(url, patterns) {
+function isValidUrl(url, patterns = []) {
   if (!url || typeof url !== 'string') return false;
   // Exclude obviously wrong files like XML
   if (url.toLowerCase().endsWith('.xml') || url.includes('Error')) return false;
   
-  const hasValidPattern = patterns.some(pattern => url.includes(pattern));
+  // Default trusted domains if patterns is empty
+  const trustedDomains = patterns.length > 0 ? patterns : ['imagine-public.x.ai', 'assets.grok.com', 'grok.com'];
+  
+  const hasValidPattern = trustedDomains.some(pattern => url.includes(pattern));
   const hasValidExt = /\.(jpg|jpeg|png|webp|mp4|webm)$/i.test(url.split('?')[0]);
   const isImaginePublic = url.includes('imagine-public.x.ai/imagine-public/images/');
   
-  return hasValidPattern && (hasValidExt || isImaginePublic);
+  return (hasValidPattern || isImaginePublic) && hasValidExt;
 }
 
 
@@ -1008,12 +1011,14 @@ async function scrollAndCollectMedia(type) {
             cardPostId: postId
           });
 
-          if (isValidUrl(videoUrl, [])) { // Video matches assets.grok.com via isValidUrl inner logic
+          if (isValidUrl(videoUrl, URL_PATTERNS.IMAGE)) {
             if (!allMediaData.has(videoUrl)) {
               const filename = generateUniqueFilename(videoUrl, postId || videoId, true);
               allMediaData.set(videoUrl, { url: videoUrl, filename, isVideo: true });
               console.log(`[DEBUG] Collected video: ${videoUrl}`);
             }
+          } else {
+            console.log(`[DEBUG] Video URL rejected by isValidUrl: ${videoUrl}`);
           }
         }
       }
@@ -1036,37 +1041,26 @@ async function scrollAndCollectMedia(type) {
           });
           
           let imageUrl = originalUrl;
-          const isPreview = originalUrl.includes('preview_image') || originalUrl.includes('thumbnail');
           
-          // CRITICAL DECISION LOGIC
-          if (assetIdFromImg) {
-            // Determine which ID to use for the HQ bucket
-            // In mixed media, often the image assetId is what's valid at imagine-public
-            const hqUrl = `https://imagine-public.x.ai/imagine-public/images/${assetIdFromImg}.jpg?cache=1&dl=1`;
+          if (assetIdFromImg || postId) {
+            // Priority: Assets with UUID can target the High-Quality bucket
+            const targetId = assetIdFromImg || postId;
+            const hqUrl = `https://imagine-public.x.ai/imagine-public/images/${targetId}.jpg?cache=1&dl=1`;
             
-            if (hasVideoInCard && isPreview) {
-               console.log(`[DEBUG] Skipping suspected video thumbnail: ${originalUrl}`);
-               imageUrl = null;
-            } else {
-               imageUrl = hqUrl;
-               console.log(`[DEBUG] Target set to High-Quality Image: ${imageUrl}`);
-            }
-          } else {
-            console.log(`[DEBUG] No UUID in image src. Found image is likely UI/preview only: ${originalUrl}`);
-            imageUrl = null;
+            // Re-evaluating: Don't skip preview_image if we can try HQ. 
+            // If the user wants the image, we should try to provide the best version.
+            imageUrl = hqUrl;
+            console.log(`[DEBUG] Target set to High-Quality Image candidate: ${imageUrl}`);
           }
 
           if (imageUrl && isValidUrl(imageUrl, URL_PATTERNS.IMAGE)) {
             if (!allMediaData.has(imageUrl)) {
-              // Use Asset ID or Post ID for filename
               const filename = generateUniqueFilename(imageUrl, assetIdFromImg || postId, false);
               allMediaData.set(imageUrl, { url: imageUrl, filename, isVideo: false });
               console.log(`[DEBUG] Successfully collected image for download: ${imageUrl}`);
             } else {
               console.log(`[DEBUG] Image URL already in collection: ${imageUrl}`);
             }
-          } else if (imageUrl) {
-            console.log(`[DEBUG] Image URL rejected by isValidUrl: ${imageUrl}`);
           }
         }
       }
