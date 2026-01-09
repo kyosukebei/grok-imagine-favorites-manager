@@ -342,49 +342,21 @@ function determineFilename(url, fallbackBase = null, isVideo = false) {
     const last = segments.length ? segments[segments.length - 1] : '';
     const cleanLast = last.split('?')[0];
 
-    // Prefer a UUID-like segment anywhere in the path (common in these assets).
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    
-    let baseName = '';
-    let ext = isVideo ? '.mp4' : '.png';
-
-    // Search for UUID
-    for (let i = segments.length - 1; i >= 0; i--) {
-      const seg = segments[i].split('?')[0];
-      if (uuidRe.test(seg)) {
-        if (i === segments.length - 1) {
-          // UUID is the last segment (e.g., imagine-public)
-          baseName = seg;
-          console.log(`[FILENAME] UUID found as last segment: ${baseName}`);
-        } else {
-          // UUID is a parent directory (e.g., assets.grok.com)
-          // Combine UUID with last segment to ensure uniqueness
-          const suffix = cleanLast.replace(/\.[a-zA-Z0-9]{1,5}$/, '');
-          baseName = `${seg}_${suffix}`;
-          console.log(`[FILENAME] UUID parent + suffix: ${baseName}`);
-        }
-        
-        const lastExtMatch = cleanLast.match(/(\.[a-zA-Z0-9]{1,5})$/);
-        ext = lastExtMatch ? lastExtMatch[1] : ext;
-        const result = `${baseName}${ext}`;
-        console.log(`[FILENAME] Final (UUID-based): ${result} for ${url}`);
-        return result;
-      }
-    }
-
-    // Fallback logic
-    if (/\.[a-zA-Z0-9]{1,5}$/.test(cleanLast)) {
-      console.log(`[FILENAME] No UUID, using last segment: ${cleanLast}`);
+    // Simple approach: Use the filename from the URL, which is usually a UUID or unique asset name
+    if (cleanLast) {
+      console.log(`[FILENAME] Using URL filename: ${cleanLast} for ${url}`);
       return cleanLast;
     }
 
+    // Fallback logic
     if (fallbackBase) {
+      const ext = isVideo ? '.mp4' : '.png';
       const result = `${fallbackBase}${ext}`;
       console.log(`[FILENAME] Using fallbackBase: ${result}`);
       return result;
     }
 
-    const lastResort = `${isVideo ? 'video' : 'image'}_${Date.now()}${ext}`;
+    const lastResort = `${isVideo ? 'video' : 'image'}_${Date.now()}${isVideo ? '.mp4' : '.png'}`;
     console.log(`[FILENAME] Last resort: ${lastResort}`);
     return lastResort;
   } catch (e) {
