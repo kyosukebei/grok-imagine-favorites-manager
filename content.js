@@ -929,11 +929,17 @@ async function scrollAndCollectMedia(type) {
       // Extract image
       const img = card.querySelector(SELECTORS.IMAGE);
       if (img && img.src) {
-        const url = img.src.split('?')[0].replace(/\/cdn-cgi\/image\/[^\/]*\//, '/');
+        let url = img.src.split('?')[0].replace(/\/cdn-cgi\/image\/[^\/]*\//, '/');
+        const postId = extractPostId(img.src);
 
-        if (isValidUrl(url, URL_PATTERNS.IMAGE)) {
-          const filename = determineFilename(url, null, false);
-          imageName = extractBaseName(url);
+        if (postId) {
+          // Construct high-quality download URL as per user request
+          url = `https://imagine-public.x.ai/imagine-public/images/${postId}.jpg?cache=1&dl=1`;
+        }
+
+        if (isValidUrl(url, URL_PATTERNS.IMAGE) || postId) {
+          const filename = determineFilename(url, postId, false);
+          imageName = postId || extractBaseName(url);
 
           // Store image data
           if (!allMediaData.has(url)) {
