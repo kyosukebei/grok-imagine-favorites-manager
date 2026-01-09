@@ -7,7 +7,7 @@
 const SELECTORS = {
   CARD: '[role="listitem"] .relative.group\\/media-post-masonry-card',
   IMAGE: 'img[alt*="Generated"]',
-  VIDEO: 'video[src*="generated_video"]',
+  VIDEO: 'video',
   VIDEO_INDICATOR: 'svg[data-icon="play"]', // Play button overlay indicates video
   UNSAVE_BUTTON: 'button[aria-label="Unsave"]',
   LIST_ITEM: '[role="listitem"]'
@@ -337,13 +337,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  */
 function determineFilename(url, fallbackBase = null, isVideo = false) {
   try {
+    if (url.startsWith('blob:')) {
+      const timestamp = Date.now();
+      const result = `video_blob_${timestamp}.mp4`;
+      console.log(`[FILENAME] Blob identified, using timed name: ${result}`);
+      return result;
+    }
+
     const parsed = new URL(url);
     const segments = parsed.pathname.split('/').filter(Boolean);
     const last = segments.length ? segments[segments.length - 1] : '';
     const cleanLast = last.split('?')[0];
 
     // Simple approach: Use the filename from the URL, which is usually a UUID or unique asset name
-    if (cleanLast) {
+    if (cleanLast && cleanLast.includes('.')) {
       console.log(`[FILENAME] Using URL filename: ${cleanLast} for ${url}`);
       return cleanLast;
     }
@@ -1045,20 +1052,19 @@ async function scrollAndCollectMedia(type) {
           if (assetIdFromImg || postId) {
             // Priority: Assets with UUID can target the High-Quality bucket
             const targetId = assetIdFromImg || postId;
+            const isPreview = originalUrl.includes('preview_image') || originalUrl.includes('thumbnail');
             
             // THE CRITICAL FIX:
-            // If the image ID is the SAME as the video ID, it's just a thumbnail generated for the video.
-            // These DO NOT exist in the imagine-public.x.ai (HQ) bucket.
-            // Trying to download them results in 404.
-            const isVideoThumb = hasVideoInCard && (targetId === videoId) && originalUrl.includes('preview_image');
+            // "Video ID.jpg" usually DOES NOT exist on imagine-public.
+            // If our image targetId matches the main card/video ID and it's a known preview path,
+            // we should stick to the original assets.grok.com URL.
+            const isVideoThumb = hasVideoInCard && (targetId === (videoId || postId)) && isPreview;
             
             if (isVideoThumb) {
-               // Use the original preview URL which actually exists
                imageUrl = originalUrl;
-               console.log(`[DEBUG] Video thumbnail detected (ID match: ${targetId}). Using original URL to avoid 404: ${imageUrl}`);
+               console.log(`[DEBUG] Video-associated thumbnail detected (ID: ${targetId}). Using original URL to avoid 404: ${imageUrl}`);
             } else {
-               // It's either a standalone image or a shared card with a DIFFERENT image ID.
-               // In these cases, we try the High-Quality version.
+               // If it's a standalone image or has a DIFFERENT ID, try the best bucket.
                imageUrl = `https://imagine-public.x.ai/imagine-public/images/${targetId}.jpg?cache=1&dl=1`;
                console.log(`[DEBUG] Target set to High-Quality Image candidate: ${imageUrl}`);
             }
