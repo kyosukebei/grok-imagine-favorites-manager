@@ -504,23 +504,6 @@ function isValidUrl(url, patterns) {
   return hasValidPattern && (hasValidExt || isImaginePublic);
 }
 
-/**
- * Checks if a URL exists using a HEAD request (lightweight)
- * @param {string} url - The URL to check
- * @returns {Promise<boolean>}
- */
-async function checkUrlExists(url) {
-  if (!url) return false;
-  try {
-    const response = await fetch(url, {
-      method: 'HEAD',
-      credentials: 'include'
-    });
-    return response.ok;
-  } catch (error) {
-    return false;
-  }
-}
 
 /**
  * Checks if a video URL exists by creating a video element and testing load
@@ -1056,28 +1039,19 @@ async function scrollAndCollectMedia(type) {
           // Attempt HQ URL if we have an ID
           if (effectivePostId) {
             const hqCandidate = `https://imagine-public.x.ai/imagine-public/images/${effectivePostId}.jpg?cache=1&dl=1`;
-            // Check if it's a preview for a video (often doesn't have an HQ image counterpart)
             const isPreview = originalUrl.includes('preview_image') || originalUrl.includes('thumbnail');
             
-            if (hasVideoInCard && isPreview && (effectivePostId === videoId || !postId)) {
-               console.log('Skipping video preview as redundant:', hqCandidate);
-               imageUrl = null; // Mark as skipped
+            // SKIP condition for video content
+            if (hasVideoInCard && isPreview) {
+               // Video cards have images that are just thumbnails. 
+               // These often don't have HQ versions at imagine-public.x.ai, causing 404s.
+               console.log('Skipping video thumbnail to prevent 404:', hqCandidate);
+               imageUrl = null; 
             } else {
-               // Dynamic Check for HQ URL
-               console.log(`Checking HQ URL: ${hqCandidate}`);
-               const exists = await checkUrlExists(hqCandidate);
-               if (exists) {
-                 imageUrl = hqCandidate;
-                 isHQ = true;
-               } else if (!hasVideoInCard) {
-                 // FALLBACK: If it's a standalone image card and HQ failed (or CORS blocked), use original
-                 console.log(`HQ URL 404/Block, falling back to original for standalone image: ${originalUrl}`);
-                 imageUrl = originalUrl;
-               } else {
-                 // SKIP: If it's a preview for a video card and HQ failed, skip to avoid redundant/404 assets
-                 console.log(`HQ URL 404 for video preview, SKIPPING: ${originalUrl}`);
-                 imageUrl = null;
-               }
+               // For standalone images or non-thumbnail image generations, use the HQ URL directly.
+               // We removed the fetch() check because it's unreliable due to CORS inside the content script.
+               imageUrl = hqCandidate;
+               isHQ = true;
             }
           }
 
