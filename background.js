@@ -17,6 +17,7 @@ const activeAnalysis = new Map();
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'startDownloads') {
+    console.log(`[Background] Received startDownloads request with ${request.media?.length} items`);
     handleDownloads(request.media)
       .then(() => sendResponse({ success: true }))
       .catch(error => {
@@ -319,8 +320,12 @@ function switchTab() {
 async function handleDownloads(media) {
   if (!Array.isArray(media) || media.length === 0) throw new Error('No media provided');
   await chrome.storage.local.set({ totalDownloads: media.length, downloadProgress: {} });
+  console.log(`[Background] Scheduling ${media.length} downloads...`);
   media.forEach((item, index) => {
-    setTimeout(() => { downloadFile(item); }, index * DOWNLOAD_CONFIG.RATE_LIMIT_MS);
+    setTimeout(() => { 
+        console.log(`[Background] Starting download ${index+1}/${media.length}: ${item.filename}`);
+        downloadFile(item); 
+    }, index * DOWNLOAD_CONFIG.RATE_LIMIT_MS);
   });
 }
 
@@ -330,6 +335,12 @@ function downloadFile(item) {
     url: item.url, 
     filename: `${DOWNLOAD_CONFIG.FOLDER}/${item.filename}`,
     saveAs: false
+  }, (downloadId) => {
+    if (chrome.runtime.lastError) {
+        console.error(`[Background] Download failed for ${item.filename}:`, chrome.runtime.lastError);
+    } else {
+        console.log(`[Background] Download started: ID ${downloadId} -> ${item.filename}`);
+    }
   });
 }
 
