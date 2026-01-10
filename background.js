@@ -48,7 +48,7 @@ async function analyzePostInTab(postId, postUrl) {
 
   try {
     const targetUrl = postUrl || `https://grok.com/imagine/post/${postId}`;
-    console.log('[Background] Opening analysis tab:', targetUrl);
+
     const tab = await chrome.tabs.create({ url: targetUrl, active: false });
     tabId = tab.id;
 
@@ -152,7 +152,7 @@ function networkSniffer() {
         
         // Check for interesting extensions
         if (url.includes('.mp4') || url.includes('.jpg') || url.includes('.png') || url.includes('.webp') || url.includes('blob:')) {
-            console.log('[Sniffer] Intercepted:', url);
+
             let current = [];
             try { current = JSON.parse(relay.dataset.collectedUrls || '[]'); } catch(e){}
             if (!current.includes(url)) {
@@ -178,7 +178,7 @@ function networkSniffer() {
         return originalOpen.apply(this, [method, url, ...rest]);
     };
     
-    console.log('[Sniffer] Network hooks installed.');
+    };
 }
 
 /**
