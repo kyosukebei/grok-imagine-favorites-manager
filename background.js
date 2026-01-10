@@ -178,7 +178,7 @@ function networkSniffer() {
         return originalOpen.apply(this, [method, url, ...rest]);
     };
     
-    };
+
 }
 
 /**
