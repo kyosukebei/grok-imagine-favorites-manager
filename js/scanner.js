@@ -26,17 +26,13 @@ var MediaScanner = {
       if (window.ProgressModal.isCancelled()) throw new Error('Operation cancelled by user');
       
       const cards = document.querySelectorAll(window.SELECTORS.CARD);
-      console.log(`[Scanner] Scroll attempt ${attempts + 1}: Found ${cards.length} cards in DOM`);
       let newItemsFound = 0;
 
       for (let idx = 0; idx < cards.length; idx++) {
         const card = cards[idx];
         const postData = window.Utils.extractPostDataFromElement(card);
         
-        if (!postData) {
-            console.warn(`[Scanner] Failed to extract data from card index ${idx}`, card);
-            continue;
-        }
+        if (!postData) continue;
 
         // Skip logging if this specific card element was already scanned in a previous attempt
         if (!processedCardElements.has(card)) {
@@ -45,22 +41,18 @@ var MediaScanner = {
 
           // If we haven't added this unique variation to our queues yet
           if (!processedPostIds.has(postData.id)) {
-            console.log(`[Scanner] New item found: ${postData.id} (Type: ${classification.type})`);
             processedPostIds.add(postData.id);
 
             if (classification.type === window.ItemClassifier.TYPES.STATIC_IMAGE) {
               // For static images, we still use the UUID for the direct URL
               const uuid = window.Utils.extractPostId(postData.id);
               const staticUrl = `https://imagine-public.x.ai/imagine-public/images/${uuid}.jpg?cache=1&dl=1`;
-              console.log(`[Scanner] Adding static image: ${uuid} -> ${staticUrl}`);
               allMediaData.set(staticUrl, { url: staticUrl, filename: `${uuid}.jpg` });
               newItemsFound++;
             } else {
               complexPostsToAnalyze.push(postData);
               newItemsFound++;
             }
-          } else {
-             // console.log(`[Scanner] Skipping duplicate: ${postData.id}`);
           }
         }
       }
@@ -73,8 +65,6 @@ var MediaScanner = {
     }
 
     // Phase 2: Deep Analysis for Complex Items
-    // Phase 2: Deep Analysis for Complex Items
-    console.log(`[Scanner] Phase 2 start. Processing ${complexPostsToAnalyze.length} complex items.`);
     
     for (let i = 0; i < complexPostsToAnalyze.length; i++) {
       if (window.ProgressModal.isCancelled()) break;
@@ -99,14 +89,12 @@ var MediaScanner = {
       } catch (e) {
         console.error(`[Scanner] ❌ Analysis failed for ${id}:`, e);
       }
-      console.log(`[Scanner] Finished processing item ${i+1}/${complexPostsToAnalyze.length}`);
       
       await window.Utils.sleep(window.CONFIG.ANALYSIS_DELAY_MS);
     }
 
     // Filter results based on requested type
     let finalResults = Array.from(allMediaData.values());
-    console.log(`[Scanner] Total collected before filter: ${finalResults.length} items (Action: ${type})`);
 
     if (type === 'saveImages') {
       finalResults = finalResults.filter(item => !item.filename.toLowerCase().endsWith('.mp4'));
@@ -114,7 +102,6 @@ var MediaScanner = {
       finalResults = finalResults.filter(item => item.filename.toLowerCase().endsWith('.mp4'));
     }
 
-    console.log(`[Scanner] Final results after filter: ${finalResults.length} items`);
     return finalResults;
   },
 
