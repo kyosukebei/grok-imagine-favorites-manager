@@ -2,6 +2,26 @@
 
 A modern Chrome extension to download and manage your favorited Grok Imagine images and videos.
 
+## ⚠️ ARCHIVED: NO LONGER MAINTAINED
+
+> [!CAUTION]
+> **Project Status: Archived (February 2026)**
+> 
+> Thanks to recent fixes from **[masamunet](https://github.com/masamunet)**, most features are currently functional. However, I no longer use Grok frequently and do not have the time required to maintain this extension against future platform changes. 
+>
+> The repository is now in **read-only** mode.
+
+### 🛠 What this means:
+* **Read-Only:** No further issues or Pull Requests will be addressed.
+* **Functional (for now):** The current code reflects the latest working fixes for the February 2026 Grok UI.
+* **Open Source:** The code remains available for educational purposes or forking.
+
+**Want to keep it alive?** You are more than welcome to **fork** this repository if you wish to maintain it or adapt it to future website layout changes.
+
+---
+
+A modern Chrome extension to download and manage your favorited Grok Imagine images and videos.
+
 <img width="337" height="597" alt="Screenshot 2025-11-19 at 11 57 57 AM" src="https://github.com/user-attachments/assets/a42e7456-3100-4935-972f-6548c974049d" />
 
 <img width="408" height="257" alt="Screenshot 2025-11-17 at 10 23 38 AM" src="https://github.com/user-attachments/assets/51ac09e1-8973-4cf3-a5e7-034677b62cdf" />
