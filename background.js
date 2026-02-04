@@ -12,6 +12,9 @@ const DOWNLOAD_CONFIG = {
 // Global map to track analysis requests
 const activeAnalysis = new Map();
 
+// Global storage for scanned media (used by selective download)
+let scannedMedia = [];
+
 /**
  * Handles messages from content script
  */
@@ -32,6 +35,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .then(result => sendResponse({ success: true, data: result }))
       .catch(error => {
         console.error('Analysis error:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (request.action === 'getScannedMedia') {
+    sendResponse({ media: scannedMedia });
+    return true;
+  }
+
+  if (request.action === 'storeScannedMedia') {
+    scannedMedia = request.media || [];
+    console.log('[Background] Stored', scannedMedia.length, 'items for selective download');
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (request.action === 'startDownloadsWithOrganization') {
+    handleDownloadsWithOrganization(request.media)
+      .then(() => sendResponse({ success: true }))
+      .catch(error => {
         sendResponse({ success: false, error: error.message });
       });
     return true;
@@ -313,23 +337,119 @@ function switchTab() {
 }
 
 /**
+ * Download with smart organization
+ */
+async function handleDownloadsWithOrganization(media) {
+  if (!Array.isArray(media) || media.length === 0) throw new Error('No media provided');
+
+  const config = await new Promise((resolve) => {
+    chrome.storage.sync.get(['grok_favorites_preferences'], (result) => {
+      const prefs = result['grok_favorites_preferences'] || {};
+      resolve({
+        folderStructure: prefs.folderStructure || 'date',
+        filenameTemplate: prefs.filenameTemplate || '{id}.{ext}',
+        dateFormat: prefs.dateFormat || 'yyyy-mm-dd',
+        includeMetadata: prefs.includeMetadata !== false
+      });
+    });
+  });
+
+  await chrome.storage.local.set({ totalDownloads: media.length, downloadProgress: {} });
+
+  const batchId = `batch_${Date.now()}`;
+  const metadata = {
+    batchId,
+    exportDate: new Date().toISOString(),
+    totalItems: media.length,
+    config,
+    items: []
+  };
+
+  media.forEach((item, index) => {
+    setTimeout(() => {
+      const ext = item.url.toLowerCase().includes('.mp4') ? 'mp4' : 'jpg';
+      const filename = generateFilename(item, config.filenameTemplate, ext);
+      const folder = getFolderPath(item, config);
+      const organizedPath = `${folder}/${filename}`;
+
+      downloadFile({ ...item, filename: organizedPath });
+
+      metadata.items.push({
+        id: item.id,
+        filename: filename,
+        folder: folder,
+        url: item.url,
+        date: item.date || new Date().toISOString()
+      });
+    }, index * DOWNLOAD_CONFIG.RATE_LIMIT_MS);
+  });
+
+  // Store metadata
+  await new Promise((resolve) => {
+    const key = `metadata_${batchId}`;
+    chrome.storage.local.set({ [key]: metadata }, resolve);
+  });
+}
+
+/**
  * Standard Download Logic
  */
 async function handleDownloads(media) {
   if (!Array.isArray(media) || media.length === 0) throw new Error('No media provided');
   await chrome.storage.local.set({ totalDownloads: media.length, downloadProgress: {} });
   media.forEach((item, index) => {
-    setTimeout(() => { 
-        downloadFile(item); 
+    setTimeout(() => {
+        downloadFile(item);
     }, index * DOWNLOAD_CONFIG.RATE_LIMIT_MS);
   });
 }
 
+function generateFilename(item, template, ext) {
+  let filename = template;
+  filename = filename.replace('{id}', item.id || 'unknown');
+  filename = filename.replace('{ext}', ext);
+
+  const dateStr = item.date || new Date().toISOString().split('T')[0];
+  filename = filename.replace('{date}', dateStr);
+
+  const promptSanitized = sanitizePrompt(item.prompt);
+  filename = filename.replace('{prompt}', promptSanitized);
+
+  filename = filename.replace(/\.+/g, '.');
+  return filename;
+}
+
+function getFolderPath(item, config) {
+  if (config.folderStructure === 'date') {
+    const dateStr = item.date || new Date().toISOString().split('T')[0];
+    const formatted = config.dateFormat === 'yyyy/mm/dd'
+      ? dateStr.replace(/-/g, '/')
+      : dateStr;
+    return `${DOWNLOAD_CONFIG.FOLDER}/${formatted}`;
+  } else if (config.folderStructure === 'prompt') {
+    const promptFolder = sanitizePrompt(item.prompt);
+    return `${DOWNLOAD_CONFIG.FOLDER}/${promptFolder}`;
+  }
+  return DOWNLOAD_CONFIG.FOLDER;
+}
+
+function sanitizePrompt(prompt) {
+  if (!prompt) return 'generated';
+  return prompt
+    .substring(0, 50)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/-+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'generated';
+}
+
 function downloadFile(item) {
   if (!item.url || !item.filename) return;
-  chrome.downloads.download({ 
-    url: item.url, 
-    filename: `${DOWNLOAD_CONFIG.FOLDER}/${item.filename}`,
+  chrome.downloads.download({
+    url: item.url,
+    filename: item.filename,
     saveAs: false
   });
 }

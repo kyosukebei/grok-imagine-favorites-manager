@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Organization Settings - Grok Favorites Manager</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #0a0a0a;
+      color: #e5e5e5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      padding: 20px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+      padding: 20px;
+      border-bottom: 1px solid #2a2a2a;
+      margin: -20px -20px 20px -20px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #888;
+    }
+
+    .section {
+      margin-bottom: 24px;
+      padding: 16px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #666;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .setting {
+      margin-bottom: 16px;
+    }
+
+    .setting:last-child {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: #e5e5e5;
+      font-weight: 500;
+    }
+
+    .description {
+      font-size: 12px;
+      color: #888;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    select,
+    input {
+      width: 100%;
+      padding: 10px;
+      background: #0f0f0f;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #e5e5e5;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    select:focus,
+    input:focus {
+      outline: none;
+      border-color: #fff;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="checkbox"] {
+      width: auto;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .template-example {
+      background: #0f0f0f;
+      border: 1px solid #2a2a2a;
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .template-variables {
+      font-size: 12px;
+      color: #888;
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+
+    .template-variables code {
+      background: #0f0f0f;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      color: #e5e5e5;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid #2a2a2a;
+      background: #1a1a1a;
+      color: #e5e5e5;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+
+    button:hover {
+      background: #2a2a2a;
+      border-color: #3a3a3a;
+    }
+
+    button.primary {
+      background: #fff;
+      color: #0a0a0a;
+      border-color: #fff;
+    }
+
+    button.primary:hover {
+      background: #e5e5e5;
+    }
+
+    .success {
+      background: #1a3a1a;
+      border: 1px solid #2a5a2a;
+      color: #6fd06f;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .success.show {
+      display: block;
+    }
+
+    .export-options {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .export-options button {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    .tab-button {
+      padding: 12px 16px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #888;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .tab-button.active {
+      color: #fff;
+      border-bottom-color: #fff;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Organization & Export</h1>
+    <div class="subtitle">Configure how your downloads are organized</div>
+  </div>
+
+  <div class="success" id="successMsg">Settings saved successfully!</div>
+
+  <div class="tabs">
+    <button class="tab-button active" data-tab="organization">Organization</button>
+    <button class="tab-button" data-tab="export">Export</button>
+  </div>
+
+  <div id="organization" class="tab-content active">
+    <div class="section">
+      <div class="section-title">Folder Structure</div>
+
+      <div class="setting">
+        <label>How would you like to organize your downloads?</label>
+        <select id="folderStructure">
+          <option value="flat">Flat (all in one folder)</option>
+          <option value="date">By Date (YYYY/MM/DD)</option>
+          <option value="prompt">By Prompt Keyword</option>
+        </select>
+        <div class="description">Choose how folders are created for your downloads</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Filename Template</div>
+
+      <div class="setting">
+        <label>Filename Format</label>
+        <input type="text" id="filenameTemplate" placeholder="{id}.{ext}">
+        <div class="template-variables">
+          Available variables:
+          <br><code>{id}</code> - Unique item ID
+          <br><code>{ext}</code> - File extension (jpg, mp4)
+          <br><code>{date}</code> - Download date (YYYY-MM-DD)
+          <br><code>{prompt}</code> - Prompt keyword (sanitized)
+        </div>
+        <div class="template-example" id="templateExample"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Options</div>
+
+      <div class="setting">
+        <div class="checkbox-group">
+          <input type="checkbox" id="includeMetadata">
+          <label for="includeMetadata" style="margin-bottom: 0;">Include metadata JSON file</label>
+        </div>
+        <div class="description">Saves a JSON file with details about all downloaded items</div>
+      </div>
+
+      <div class="setting">
+        <label>Date Format</label>
+        <select id="dateFormat">
+          <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+          <option value="yyyy/mm/dd">YYYY/MM/DD</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="closeBtn">Close</button>
+      <button id="saveBtn" class="primary">Save Settings</button>
+    </div>
+  </div>
+
+  <div id="export" class="tab-content">
+    <div class="section">
+      <div class="section-title">Export Download History</div>
+
+      <div class="setting">
+        <label>Export your download history in various formats</label>
+        <div class="export-options">
+          <button id="exportJson">JSON</button>
+          <button id="exportCsv">CSV</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Search & Export</div>
+
+      <div class="setting">
+        <label>Search Downloads</label>
+        <input type="text" id="searchPrompt" placeholder="Search by prompt or ID...">
+      </div>
+
+      <div class="setting">
+        <label>Date Range</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <input type="date" id="searchDateFrom" placeholder="From">
+          <input type="date" id="searchDateTo" placeholder="To">
+        </div>
+      </div>
+
+      <div class="setting">
+        <label>Type</label>
+        <select id="searchType">
+          <option value="">All Types</option>
+          <option value="image">Images</option>
+          <option value="video">Videos</option>
+        </select>
+      </div>
+
+      <button id="searchBtn" style="width: 100%; margin-top: 8px;">Search</button>
+      <div id="searchResults" style="margin-top: 12px; min-height: 50px;"></div>
+
+      <div class="export-options" style="margin-top: 12px;">
+        <button id="exportSearchJson">Export as JSON</button>
+        <button id="exportSearchCsv">Export as CSV</button>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="closeBtnExport">Close</button>
+    </div>
+  </div>
+
+  <script src="js/logger.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/smart-organizer.js"></script>
+  <script src="js/metadata-manager.js"></script>
+  <script src="organization-settings.js"></script>
+</body>
+</html>

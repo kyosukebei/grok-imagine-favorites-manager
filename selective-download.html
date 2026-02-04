@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Selective Download - Grok Favorites Manager</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #0a0a0a;
+      color: #e5e5e5;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+      padding: 20px;
+      border-bottom: 1px solid #2a2a2a;
+      margin: -20px -20px 20px -20px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #888;
+    }
+
+    .section {
+      margin-bottom: 24px;
+      padding: 16px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #666;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .filter-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: #e5e5e5;
+    }
+
+    input[type="date"],
+    select {
+      width: 100%;
+      padding: 10px;
+      background: #0f0f0f;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      color: #e5e5e5;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    input[type="date"]:focus,
+    select:focus {
+      outline: none;
+      border-color: #fff;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+    }
+
+    .date-range {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .media-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .preview-item {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      background: #2a2a2a;
+      border: 2px solid #2a2a2a;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .preview-item.selected {
+      border-color: #fff;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+    }
+
+    .preview-item img,
+    .preview-item video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+
+    .checkbox {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 16px;
+      height: 16px;
+      background: #fff;
+      border-radius: 3px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #0a0a0a;
+    }
+
+    .preview-item.selected .checkbox {
+      display: flex;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .stat-card {
+      background: #0f0f0f;
+      border: 1px solid #2a2a2a;
+      padding: 12px;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      margin-top: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid #2a2a2a;
+      background: #1a1a1a;
+      color: #e5e5e5;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+    }
+
+    button:hover {
+      background: #2a2a2a;
+      border-color: #3a3a3a;
+    }
+
+    button.primary {
+      background: #fff;
+      color: #0a0a0a;
+      border-color: #fff;
+    }
+
+    button.primary:hover {
+      background: #e5e5e5;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .bulk-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .bulk-actions button {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #888;
+    }
+
+    .spinner {
+      border: 2px solid #2a2a2a;
+      border-top: 2px solid #fff;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 10px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .scrollable {
+      overflow-y: auto;
+      max-height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Selective Download</h1>
+    <div class="subtitle">Filter and choose which media to download</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Filters</div>
+
+    <div class="filter-group">
+      <label>Media Type</label>
+      <select id="typeFilter">
+        <option value="all">All Media</option>
+        <option value="images">Images Only</option>
+        <option value="videos">Videos Only</option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label>Date Range (Optional)</label>
+      <div class="date-range">
+        <div>
+          <label style="font-size: 11px; margin-bottom: 4px;">From</label>
+          <input type="date" id="dateFrom">
+        </div>
+        <div>
+          <label style="font-size: 11px; margin-bottom: 4px;">To</label>
+          <input type="date" id="dateTo">
+        </div>
+      </div>
+    </div>
+
+    <div class="bulk-actions">
+      <button id="selectAllBtn">Select All</button>
+      <button id="deselectAllBtn">Deselect All</button>
+      <button id="invertSelectionBtn">Invert</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Preview (Click to select)</div>
+    <div id="mediaPreview" class="media-preview scrollable"></div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-value" id="totalCount">0</div>
+      <div class="stat-label">Total Items</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="selectedCount">0</div>
+      <div class="stat-label">Selected</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="typeBreakdown">-</div>
+      <div class="stat-label">Type Breakdown</div>
+    </div>
+  </div>
+
+  <div class="action-buttons">
+    <button id="cancelBtn">Cancel</button>
+    <button id="downloadBtn" class="primary" disabled>Download Selected</button>
+  </div>
+
+  <script src="js/logger.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/smart-organizer.js"></script>
+  <script src="selective-download.js"></script>
+</body>
+</html>

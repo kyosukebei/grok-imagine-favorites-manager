@@ -37,6 +37,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return;
   }
 
+  if (action === 'scanForSelectiveDownload') {
+    (async () => {
+      try {
+        chrome.storage.local.set({ activeOperation: true });
+        if (!window.ProgressModal) {
+          throw new Error('UI Module not loaded. Please refresh the page.');
+        }
+        window.ProgressModal.show('Scanning for Download', 'Collecting media...');
+
+        const mediaList = await window.MediaScanner.scan('saveBoth');
+
+        if (mediaList.length === 0) {
+          throw new Error('No media found.');
+        }
+
+        window.ProgressModal.update(100, `Found ${mediaList.length} items`);
+
+        chrome.runtime.sendMessage({ action: 'storeScannedMedia', media: mediaList }, () => {
+          if (window.ProgressModal) {
+            setTimeout(() => window.ProgressModal.remove(), 1000);
+          }
+        });
+
+        sendResponse({ success: true, mediaCount: mediaList.length });
+      } catch (error) {
+        console.error('[GrokManager] Scan error:', error);
+        if (window.ProgressModal) window.ProgressModal.remove();
+        sendResponse({ success: false, error: error.message });
+      } finally {
+        chrome.storage.local.set({ activeOperation: false });
+      }
+    })();
+    return true;
+  }
+
   // Handle Main Actions
   (async () => {
     try {

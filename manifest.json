@@ -28,6 +28,10 @@
         "js/classifier.js",
         "js/api.js",
         "js/scanner.js",
+        "js/logger.js",
+        "js/config.js",
+        "js/smart-organizer.js",
+        "js/metadata-manager.js",
         "content.js"
       ]
     }

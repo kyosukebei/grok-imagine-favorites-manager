@@ -13,25 +13,29 @@ const PROGRESS_CLEAR_DELAY = 5000; // Clear progress after 5 seconds
 document.addEventListener('DOMContentLoaded', () => {
   // Check if we're on the favorites page first
   checkIfOnFavoritesPage();
-  
+
   // Download actions
+  document.getElementById('selectiveDownload').addEventListener('click', openSelectiveDownload);
   document.getElementById('saveImages').addEventListener('click', () => sendAction('saveImages'));
   document.getElementById('saveVideos').addEventListener('click', () => sendAction('saveVideos'));
   document.getElementById('saveBoth').addEventListener('click', () => sendAction('saveBoth'));
   document.getElementById('upscaleVideos').addEventListener('click', () => sendAction('upscaleVideos'));
-  
+
   // Manage actions
   document.getElementById('unsaveAll').addEventListener('click', () => sendAction('unsaveAll'));
-  
+
+  // Settings
+  document.getElementById('organizationSettings').addEventListener('click', openOrganizationSettings);
+
   // Utility actions
   document.getElementById('viewDownloads').addEventListener('click', openDownloadsPage);
   document.getElementById('downloadSettings').addEventListener('click', openDownloadSettings);
   document.getElementById('cancelOperation').addEventListener('click', cancelCurrentOperation);
-  
+
   // Start progress tracking
   setInterval(updateProgress, UPDATE_INTERVAL);
   updateProgress();
-  
+
   // Check for active operations
   checkActiveOperation();
 });
@@ -134,6 +138,55 @@ function sendAction(action) {
         window.close();
       }
     });
+  });
+}
+
+/**
+ * Opens selective download UI
+ */
+function openSelectiveDownload() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs || tabs.length === 0) {
+      alert('No active tab found');
+      return;
+    }
+
+    const tab = tabs[0];
+    const url = tab.url || '';
+    const isFavoritesPage = url.includes('grok.com/imagine/favorites');
+
+    if (!isFavoritesPage) {
+      alert('Please navigate to grok.com/imagine/favorites first');
+      return;
+    }
+
+    chrome.tabs.sendMessage(tab.id, { action: 'scanForSelectiveDownload' }, async (response) => {
+      if (chrome.runtime.lastError) {
+        alert('Failed to scan media. Please refresh the page and try again.');
+        return;
+      }
+
+      const popupUrl = chrome.runtime.getURL('selective-download.html');
+      chrome.windows.create({
+        url: popupUrl,
+        type: 'popup',
+        width: 900,
+        height: 700
+      });
+    });
+  });
+}
+
+/**
+ * Opens organization settings page
+ */
+function openOrganizationSettings() {
+  const settingsUrl = chrome.runtime.getURL('organization-settings.html');
+  chrome.windows.create({
+    url: settingsUrl,
+    type: 'popup',
+    width: 600,
+    height: 700
   });
 }
 
